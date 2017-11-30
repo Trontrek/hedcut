@@ -1,6 +1,7 @@
 #include "hedcut.h"
 #include <time.h>
 
+#include <boost/random.hpp>
 
 Hedcut::Hedcut()
 {
@@ -72,15 +73,20 @@ void Hedcut::sample_initial_points(cv::Mat & img, int n, std::vector<cv::Point2d
 	cv::RNG rng_gaussian(time(NULL));
 	cv::Mat visited(img.size(), CV_8U, cv::Scalar::all(0)); //all unvisited
 
+	boost::mt19937 rng; //added 
+	boost::uniform_01<boost::mt19937, float> generator( rng ); //added
+		
 	while (count < n)
 	{
 		//generate a random point
 		int c = (int)floor(img.size().width*rng_uniform.uniform(0.f, 1.f));
 		int r = (int)floor(img.size().height*rng_uniform.uniform(0.f, 1.f));
-
+		
 		//decide to keep basic on a probability (black has higher probability)
 		float value = img.at<uchar>(r, c)*1.0/255; //black:0, white:1
-		float gr = fabs(rng_gaussian.gaussian(0.8));
+		//float gr = fabs(rng_gaussian.gaussian(0.8));
+		float gr = ceil(generator()); // random number between 0 and 1
+		
 		if ( value < gr && visited.at<uchar>(r, c) ==0) //keep
 		{
 			count++;
@@ -117,12 +123,12 @@ void Hedcut::create_disks(cv::Mat & img, CVT & cvt)
 		for (auto & resizedPix : cell.coverage)
 		{
 			cv::Point pix(resizedPix.x / subpixels, resizedPix.y / subpixels);
-			total += grayscale.at<uchar>(pix.x, pix.y);
+			//total += grayscale.at<uchar>(pix.x, pix.y);
 			r += img.at<cv::Vec3b>(pix.x, pix.y)[2];
 			g += img.at<cv::Vec3b>(pix.x, pix.y)[1];
 			b += img.at<cv::Vec3b>(pix.x, pix.y)[0];
 		}
-		float avg_v = floor(total * 1.0f/ cell.coverage.size());
+		//float avg_v = floor(total * 1.0f/ cell.coverage.size());
 		r = floor(r / cell.coverage.size());
 		g = floor(g / cell.coverage.size());
 		b = floor(b / cell.coverage.size());
@@ -132,7 +138,8 @@ void Hedcut::create_disks(cv::Mat & img, CVT & cvt)
 		disk.center.x = cell.site.y; //x = col
 		disk.center.y = cell.site.x; //y = row
 		disk.color = (black_disk) ? cv::Scalar::all(0) : cv::Scalar(r, g, b, 0.0);
-		disk.radius = (uniform_disk_size) ? disk_size : (100 * disk_size / (avg_v + 100));
+		//disk.radius = (uniform_disk_size) ? disk_size : (100 * disk_size / (avg_v + 100));
+		disk.radius = (uniform_disk_size) ? disk_size : (cell.radius * disk_size); //added
 
 		//remember
 		this->disks.push_back(disk);

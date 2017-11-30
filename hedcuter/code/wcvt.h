@@ -33,7 +33,6 @@
 #include <GL/glut.h>
 #endif
 
-
 extern int argc_GPU;
 extern char** argv_GPU;
 
@@ -45,10 +44,12 @@ struct VorCell
 	{
 		site = other.site;
 		coverage = other.coverage;
+		radius = other.radius; // added
 	}
 
 	cv::Point site;
 	std::list<cv::Point> coverage;
+	float radius; // added
 };
 
 bool compareCell(const std::pair<float, cv::Point>& p1, const std::pair<float, cv::Point>& p2);
@@ -101,17 +102,19 @@ private:
 		//note: 256 is used here instead of 255 to prevent 0 distance.
 		return (256 - img.at<uchar>(p.x, p.y))*1.0f / 256;
 	}
-
+	
 	//move the site to the center of its coverage
 	inline float move_sites(cv::Mat &  img, VorCell & cell)
 	{
+		using std::numeric_limits;
+		
 		if (cell.coverage.empty()) std::cout << "! Error: cell.coverage " << cell.site << " size = " << cell.coverage.size() << std::endl;
 
 		//Generate virtual high resolution image;
 		cv::Size res(img.size().width * subpixels, img.size().height * subpixels);
 		cv::Mat resizedImg(res.width, res.height, CV_LOAD_IMAGE_GRAYSCALE);
 		cv::resize(img, resizedImg, res, 0, 0, CV_INTER_LINEAR);
-
+		
 		//compute weighted average
 		float total = 0;
 		cv::Point2d new_pos(0, 0);
@@ -122,7 +125,7 @@ private:
 			new_pos.y += d*c.y;
 			total += d;
 		}
-
+		
 		//normalize
 		new_pos.x /= total;
 		new_pos.y /= total;
@@ -130,10 +133,28 @@ private:
 		//Redirect output site to the position in original image
 		new_pos.x /= subpixels;
 		new_pos.y /= subpixels;
-
+		
 		//update
 		float dist = fabs(new_pos.x - cell.site.x/subpixels) + fabs(new_pos.y - cell.site.y/subpixels); //manhattan dist
 		cell.site = new_pos;
+		
+		//width of disks
+		float closest = numeric_limits<float>::max(),
+			  distance;
+		float x0 = new_pos.x, y0 = new_pos.y,
+		      x1, x2, y1, y2;
+
+		for (std::list<cv::Point>::iterator iter = cell.coverage.begin(); iter != cell.coverage.end(); ) {
+			x1 = iter->x; y1 = iter->y;
+			++iter;
+			x2 = iter->x; y2 = iter->y;
+
+			distance = abs( ( x2 - x1 ) * ( y1 - y0 ) - ( x1 - x0 ) * ( y2 - y1 ) ) / sqrt( pow( x2 - x1, 2.0f ) + pow( y2 - y1, 2.0f ) );
+			if ( closest > distance ) {
+				closest = distance;
+			}
+		}
+		cell.radius = 6 * (1 + 2*closest) * total / cell.coverage.size();
 
 		//done
 		return dist;
